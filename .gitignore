@@ -1,0 +1,5 @@
+
+#ignore any files ending in .o or .a
+*.[oa]
+*~
+*.swp

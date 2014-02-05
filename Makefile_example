@@ -1,0 +1,1202 @@
+# Non-recursive Makefile for LSC-AMR Package
+# Copyright Cambridge Numerical Solutions Ltd 2009
+# $Id: Makefile.in 37 2013-06-06 07:58:01Z philipblakely $
+
+# This Makefile handles compilation from a user-specified list of modules
+# which mirror a directory structure. There is a core set of source files
+# that are always compiled. Beyond that, only files in the modules defined
+# by the user will be compiled, *without recursion*, i.e. sub-modules are
+# only compiled if explicitly requested.
+
+# This file is based on the Non-recursive Makefile found in "Managing
+# Projects with GNU Make", 3rd edition, O'Reilly 2004, pp117ff
+# with extensions for the configuration system and for unit testing.
+
+SHELL:=/bin/bash -l
+CUDA:= 
+CPPFLAGS +=  -I/usr/include/geotiff
+CXXFLAGS +=  -O3 -funroll-loops -fgcse-sm -fgcse-las -fgcse-after-reload -funsafe-loop-optimizations -g -Wextra -Wno-deprecated -Wall -ansi -pedantic -Wredundant-decls -Wconversion -Wcast-align -Wundef -Wstrict-null-sentinel -Wno-non-template-friend -Woverloaded-virtual -Wno-pmf-conversions -Wsign-promo -Wshadow -Werror=overloaded-virtual -pipe -DUSE_EXPRESSION_TEMPLATES -march=native
+CXXFLAGS_DEBUG +=  -O0 -ggdb3 -Wextra -Wno-deprecated -Wall -ansi -pedantic -Wredundant-decls -Wconversion -Wcast-align -Wundef -Wstrict-null-sentinel -Wno-non-template-friend -Woverloaded-virtual -Wno-pmf-conversions -Wsign-promo -Wshadow -Werror=overloaded-virtual -pipe -DUSE_EXPRESSION_TEMPLATES -march=native -DDEBUG
+CXXFLAGS_DEBUG_OPT +=  -O3 -funroll-loops -fgcse-sm -fgcse-las -fgcse-after-reload -funsafe-loop-optimizations -g -Wextra -Wno-deprecated -Wall -ansi -pedantic -Wredundant-decls -Wconversion -Wcast-align -Wundef -Wstrict-null-sentinel -Wno-non-template-friend -Woverloaded-virtual -Wno-pmf-conversions -Wsign-promo -Wshadow -Werror=overloaded-virtual -pipe -DUSE_EXPRESSION_TEMPLATES -march=native -DDEBUG
+CXXFLAGS_DEBUG_INFO = -g
+CXX:=mpic++.openmpi
+# Needed because visit-plugin's cmake can enter an infinite loop if not given full path...
+# We assume that VisIt was compiled with gcc (currently true for all Linux versions of VisIt)
+CC:=`which gcc`
+
+# Determine extra includes seen in flags, so that we can ignore them when checking configuration later
+EXTRA_INCLUDES:=$(patsubst -I,,$(filter -I%,$(CPPFLAGS)))
+
+FORTRAN:=1
+FC:=gfortran
+FCFLAGS:= -O2 -g
+FCLIBS:= -L/usr/lib/gcc/x86_64-linux-gnu/4.6 -L/usr/lib/gcc/x86_64-linux-gnu/4.6/../../../x86_64-linux-gnu -L/usr/lib/gcc/x86_64-linux-gnu/4.6/../../../../lib -L/lib/x86_64-linux-gnu -L/lib/../lib -L/usr/lib/x86_64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/x86_64-linux-gnu/4.6/../../.. -lgfortran -lm -lquadmath
+
+# Do we enable unit-testing or not?
+TESTS:=1
+
+ifneq ($(strip $(TESTS)),)
+HAVE_TESTS:=1
+
+VALGRIND:=valgrind
+
+ifneq ($(strip $(VALGRIND)),)
+HAVE_VALGRIND:=1
+endif
+
+endif
+
+ifneq ($(strip $(DOXYGEN)),)
+HAVE_DOXYGEN:=1
+endif
+
+MAKE_DIR:=$(dir $(word $(words $(MAKEFILE_LIST)), $(MAKEFILE_LIST)))
+
+# Used in generating documentation differently for debug/non-debug
+DEBUG:=
+
+ifeq ($(strip $(DEBUG)),)
+PRODUCTIONCODE:=YES
+DEBUGCODE:=NO
+else
+PRODUCTIONCODE:=NO
+DEBUGCODE:=YES
+endif
+
+# Do we have Canter libraries or not?
+HAVE_CANTERA:=
+CANTERA_INCLUDE_DIR:=
+CANTERA_LIB_DIR:=
+
+# Do we have MPI capability or not?
+MPI:=1
+MPI_COMPILER:=Yes
+MPI_INCLUDE_DIRS:=
+MPI_LIBRARY_DIRS:=
+MPI_LIBS:=
+
+ifneq ($(strip $(MPI)),)
+HAVE_MPI:=1
+endif
+
+ifneq ($(strip $(MPI_COMPILER)),)
+HAVE_MPI_COMPILER:=1
+endif
+
+LIBUNWIND:=@HAVE_LIBUNWIND@
+
+ifneq ($(strip $(LIBUNWIND)),)
+HAVE_LIBUNWIND:=1
+endif
+
+LATEX:=latex
+
+# Do we have LaTeX installed?
+ifneq ($(strip $(LATEX)),)
+HAVE_LATEX:=YES
+else
+HAVE_LATEX:=NO
+endif
+
+# Setup HDF variables
+HDF:=1
+HDF_INCLUDE_DIR:=/lsc/opt/hdf5-1.8.7/include
+HDF_LIBRARY_DIR:=/lsc/opt/hdf5-1.8.7/lib
+HDF_LIBS:=-lhdf5 -lz
+
+ifneq ($(strip $(HDF)),)
+HAVE_HDF:=1
+endif
+
+# Setup VisIt usage
+VISIT:=
+VISIT_VERSION:=
+VISIT_FULL_VERSION:=
+VISIT_HDF_INCLUDE_DIR:=
+VISIT_HDF_LIBRARY_DIR:=
+VISIT_DIR:=
+ifneq ($(strip $(VISIT)),)
+HAVE_VISIT:=1
+endif
+
+# Setup Paraview usage
+PARAVIEW:=
+PARAVIEW_DIR:=
+PARAVIEW_BUILD_DIR:=
+ifneq ($(strip $(PARAVIEW)),)
+HAVE_PARAVIEW:=1
+endif
+
+# Macro definitions
+###################
+
+# Usage: $(call removespace,string)
+# Removes *all* spaces in the given string
+sp :=
+sp += 
+removespace=$(subst $(sp),,$1)
+
+# Usage: $(call unique-sources, source-files, test-source-files)
+# Define different versions dependeing on whether we've got HAVE_TESTS or not
+ifdef HAVE_TESTS
+unique-sources = $(sort $1 $2)
+else
+unique-sources = $(sort $1)
+endif
+
+# Usage $(call link-lib-dir, library-directory, libraries)
+# Convert a library directory and list of libraries to a form
+# that uniquely defines the library, so that the correct library is
+# located, rather than whichever one the system finds first
+link-lib-dir = $(subst -l,$1/lib,$(addsuffix .so,$2))
+
+# Usage $(call config-dir, config-name)
+# Determine the directory into which a configuration will be compiled
+config-dir = $(CURDIR)/$1
+
+# Root directory for source-tree
+# assumed to be the same as that from the Makefile
+# We extract the first of these
+# (If not, the list can expand dramatically. Don't know why?)
+src-dir=$(dir $(firstword $(MAKEFILE_LIST)))
+
+# Usage $(call prefix-config-dir, source-file, config-name)
+# Determine the directory into which compiled files for this configuration will be put
+# and prefix the source-file with it
+prefix-config-dir = $(addprefix $(CURDIR)/$2/objects/,$1)
+
+# Usage: $(call unique-name, source-file, config-name)
+# Construct the configuration specific filename out of the source filenames provided
+# by replacing / (directory separator) with _
+config-specific-name = $(call prefix-config-dir,$(subst /,_,$(subst ./,,$(subst ../,,$1))),$2)
+
+# Usage: $(call C-source-to-object, source-file-list, config-name)
+# Convert files ending in .C to those ending in .o
+C-source-to-object = $(call config-specific-name,$(patsubst %.C,%.o,$(filter %.C,$1)),$2)
+
+# Usage: $(call C-source-to-object, source-file-list, config-name)
+# Convert files ending in .f90 to those ending in .o
+F-source-to-object = $(call config-specific-name,$(patsubst %.f90,%.o,$(filter %.f90,$1)) $(patsubst %.f,%.o,$(filter %.f,$1)),$2)
+
+# Usage: $(call C-source-to-release-object, source-file-list, config-name)
+# Convert files ending in .C to those ending in .o
+C-source-to-release-object = $(call config-specific-name,$(patsubst %.C,%_release.o,$(filter %.C,$1)),$2)
+
+# Usage: $(call C-source-to-release-object, source-file-list, config-name)
+# Convert files ending in .f90 to those ending in _release.o
+F-source-to-release-object = $(call config-specific-name,$(patsubst %.f90,%_release.o,$(filter %.f90,$1)) $(patsubst %.f,%_release.o,$(filter %.f,$1)),$2)
+
+# Usage: $(call C-source-to-debug-object, source-file-list, config-name)
+# Convert files ending in .C to those ending in _debug.o
+C-source-to-debug-object = $(call config-specific-name,$(patsubst %.C,%_debug.o,$(filter %.C,$1)),$2)
+
+# Usage: $(call F-source-to-debug-object, source-file-list, config-name)
+# Convert files ending in .f90 to those ending in _debug.o
+F-source-to-debug-object = $(call config-specific-name,$(patsubst %.f90,%_debug.o,$(filter %.f90,$1)) $(patsubst %.f,%_debug.o,$(filter %.f,$1)),$2)
+
+# Usage: $(call C-source-to-debug-opt-object, source-file-list, config-name)
+# Convert files ending in .C to those ending in _debug_opt.o
+C-source-to-debug-opt-object = $(call config-specific-name,$(patsubst %.C,%_debug_opt.o,$(filter %.C,$1)),$2)
+
+# Usage: $(call F-source-to-debug-object, source-file-list, config-name)
+# Convert files ending in .f90 to those ending in _debug_opt.o
+F-source-to-debug-opt-object = $(call config-specific-name,$(patsubst %.f90,%_debug_opt.o,$(filter %.f90,$1)) $(patsubst %.f,%_debug_opt.o,$(filter %.f,$1)),$2)
+
+# Usage: $(call source-to-include, source-file-list)
+source-to-include = $(sort $(dir $1) )
+
+# Usage: $(call C-source-to-depend, source-file-list, config-name)
+C-source-to-depend = $(call config-specific-name,$(patsubst %.C,%.d,$1),$2)
+
+# Usage: $(call C-source-to-depend-rule, source-file, config-name)
+#Rule which creates dependencies for each object file
+define C-source-to-depend-rule
+  $(eval source-file:=$1)
+  $(eval config-name:=$2)
+  $(eval dest-file:=$(call config-specific-name,$(addsuffix .d,$(basename $(source-file))),$(config-name)))
+  $(eval dest-obj-file:=$(call config-specific-name,$(addsuffix .o,$(basename $(source-file))),$(config-name)))
+  $(eval dest-debug-obj-file:=$(call config-specific-name,$(addsuffix _debug.o,$(basename $(source-file))),$(config-name)))
+$(dest-file): $(CURDIR)/$(config-name)/date $(source-file) #compiled-headers-$(config-name)
+	@echo Generating dependencies for $(source-file)
+	@$(CXX) $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS) $(TARGET_ARCH) -I$$(call prefix-config-dir,$(config-name),) -I$(src-dir) $$(addprefix -isystem ,$(INCLUDE_DIRS)) $$(addprefix -I ,$(CORE_INCLUDE_DIRS)) $$(addprefix -I ,$$(include_dirs-$(config-name))) -MM $1 -MT $(dest-obj-file) -MT $(dest-debug-obj-file) > $(dest-file) || $(RM) $(dest-file)
+
+endef
+
+# Usage: $(call source-to-depend, source-file-list, config-name)
+F-source-to-depend = $(call config-specific-name,$(patsubst %.f90,%.d,$1) $(patsubst %.f,%.d,$1),$2)
+
+# Usage: $(call source-to-depend-rule, source-file, config-name)
+#Rule which creates dependencies for each object file
+# gcc cannot currently deal with FORTRAN dependencies, so just hope there are no includes
+# for the moment...
+define F-source-to-depend-rule
+  $(eval source-file:=$1)
+  $(eval config-name:=$2)
+  $(eval dest-file:=$(call config-specific-name,$(addsuffix .d,$(basename $(source-file))),$(config-name)))
+  $(eval dest-obj-file:=$(call config-specific-name,$(addsuffix .o,$(basename $(source-file))),$(config-name)))
+$(dest-file): $(CURDIR)/$(config-name)/date $(source-file)
+	@echo Generating dependencies for $(source-file)
+	@echo -n $(dest-obj-file): > $(dest-file)
+
+endef
+
+
+#This outputs the list of module directories used.
+#It takes the dependencies only from $(CC), separates them out onto separate lines, and removes duplicates, and strips "modules" from the front
+#This is used for checking whether any files from unspecified modules have been included
+
+# Usage: $(call source-to-module-rule, source-file, config-name)
+define source-to-module-rule
+  $(eval source-file:=$1)
+  $(eval config-name:=$2)
+  $(eval dest-file:=$(call config-specific-name,$(basename $(source-file)).modules,$(config-name)))
+  $(eval depend-file:=$(call config-specific-name,$(addsuffix .d,$(basename $(source-file))),$(config-name)))
+$(dest-file): $(CURDIR)/$(config-name)/date $(depend-file)
+	@echo "Determining modules for $(source-file)"
+	@$(SED) -e "s,^.*:,," -e "s,\\\,," $(depend-file) | tr ' ' '\n' | \
+	$(SED) -e "s,/[^/]*$$$$,," -e "/^$$$$/d" -e "s,^modules/,," | sort | uniq > $(dest-file).tmp
+	@$(MV) $(dest-file).tmp $(dest-file)
+endef
+
+# Rule for pre-compiling a header file
+# We only precompile .H files, as this is the extension we use
+# as opposed to standard libraries
+define header-to-compile-rule
+  $(eval header-file:=$1)
+  $(eval config-name:=$2)
+  $(eval dest-file:=$(call prefix-config-dir,$(notdir $(header-file)).gch,$(config-name)))
+$(dest-file):$(header-file)
+	@echo "Precompiling headers for $(header-file)"
+	@$(CXX) $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS) $(TARGET_ARCH) -I$$(call prefix-config-dir,$(config-name),) -I$(src-dir) $$(addprefix -isystem ,$(INCLUDE_DIRS)) $$(addprefix -I ,$(CORE_INCLUDE_DIRS)) $$(addprefix -I ,$$(include_dirs-$(config-name))) -x c++-header $(header-file) -o $(dest-file)
+
+compiled-headers-$(config-name):$(dest-file)
+
+endef
+
+# Rule for compiling a .o file from a .C file
+# We use the configuration object directory as an include path
+# so that we can get any precompiled headers that exist
+define C-source-to-object-rule
+  $(eval source-file:=$1)
+  $(eval config-name:=$2)
+  $(eval dest-file:=$(call C-source-to-object,$(source-file),$(config-name)))
+$(dest-file): $(source-file) $(CURDIR)/$(config-name)/date
+	@echo "Compiling $(source-file)"
+	@$(CXX) $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS) $(TARGET_ARCH) -I$$(call prefix-config-dir,$(config-name),) -I$(src-dir) $$(addprefix -isystem ,$(INCLUDE_DIRS)) $$(addprefix -I ,$(CORE_INCLUDE_DIRS)) $$(addprefix -I ,$$(include_dirs-$(config-name))) -c $(source-file) -o $(dest-file)
+endef
+
+# Rule for compiling a _release.o file from a .C file
+# This uses full optimization, but now without debug information
+# as defined by removing any flags in CXXFLAGS_DEBUG_INFO
+# This gives smaller object files and a smaller executable.
+# We use the configuration object directory as an include path
+# so that we can get any precompiled headers that exist
+define C-source-to-release-object-rule
+  $(eval source-file:=$1)
+  $(eval config-name:=$2)
+  $(eval dest-file:=$(call C-source-to-release-object,$(source-file),$(config-name)))
+  $(eval flags:=$(filter-out $(CXXFLAGS_DEBUG_INFO),$(CXXFLAGS)))
+$(dest-file): $(source-file) $(CURDIR)/$(config-name)/date
+	@echo "Compiling $(source-file)"
+	@$(CXX) $(CFLAGS) $(CPPFLAGS) $(flags) $(TARGET_ARCH) -I$$(call prefix-config-dir,$(config-name),) -I$(src-dir) $$(addprefix -isystem ,$(INCLUDE_DIRS)) $$(addprefix -I ,$(CORE_INCLUDE_DIRS)) $$(addprefix -I ,$$(include_dirs-$(config-name))) -c $(source-file) -o $(dest-file)
+endef
+
+# Rule for compiling a _debug.o file from a .C file
+# We use the configuration object directory as an include path
+# so that we can get any precompiled headers that exist
+define C-source-to-debug-object-rule
+  $(eval source-file:=$1)
+  $(eval config-name:=$2)
+  $(eval dest-file:=$(call C-source-to-debug-object,$(source-file),$(config-name)))
+$(dest-file): $(source-file) $(CURDIR)/$(config-name)/date
+	@echo "Compiling $(source-file)"
+	@$(CXX) $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS_DEBUG) $(TARGET_ARCH) -I$$(call prefix-config-dir,$(config-name),) -I$(src-dir) $$(addprefix -isystem ,$(INCLUDE_DIRS)) $$(addprefix -I ,$(CORE_INCLUDE_DIRS)) $$(addprefix -I ,$$(include_dirs-$(config-name))) -c $(source-file) -o $(dest-file)
+endef
+
+# Rule for compiling a _debug_opt.o file from a .C file
+# We use the configuration object directory as an include path
+# so that we can get any precompiled headers that exist
+define C-source-to-debug-opt-object-rule
+  $(eval source-file:=$1)
+  $(eval config-name:=$2)
+  $(eval dest-file:=$(call C-source-to-debug-opt-object,$(source-file),$(config-name)))
+$(dest-file): $(source-file) $(CURDIR)/$(config-name)/date
+	@echo "Compiling $(source-file)"
+	@$(CXX) $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS_DEBUG_OPT) $(TARGET_ARCH) -I$$(call prefix-config-dir,$(config-name),) -I$(src-dir) $$(addprefix -isystem ,$(INCLUDE_DIRS)) $$(addprefix -I ,$(CORE_INCLUDE_DIRS)) $$(addprefix -I ,$$(include_dirs-$(config-name))) -c $(source-file) -o $(dest-file)
+endef
+
+
+# Rule for checking that a given file does not compile
+# This enables checking that various expressions/constructs do not compile.
+# These constructs are designed to fail at compile-time,
+# and we need to check this. It does not appear possible to
+# use templates etc. to check this generally in an otherwise compiling code.
+define C-source-test-nocompile-rule
+  $(eval source-file:=$1)
+  $(eval config-name:=$2)
+  $(eval dest-file:=$(call C-source-to-object,$(source-file),$(config-name)))
+  $(eval exe-file:=$(patsubst %.o,%,$(dest-file)))
+$(dest-file): $(source-file) $(CURDIR)/$(config-name)/date
+	@echo "Compiling $(source-file)"
+	@$(CXX) $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS) $(TARGET_ARCH) -I$$(call prefix-config-dir,$(config-name),) -I$(src-dir) $$(addprefix -isystem ,$(INCLUDE_DIRS)) $$(addprefix -I ,$(CORE_INCLUDE_DIRS)) $$(addprefix -I ,$$(include_dirs-$(config-name))) $(source-file) -o $(exe-file) -D COMPILE_TEST=0 $(CXXLIBS)
+	@ $(exe-file);\
+	numTests="$$$$?"; fail=; echo -n "Performing $$$$numTests compile-time tests for $$(source-file)"; for i in `seq $$$$numTests`; do\
+	! $(CXX) $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS) $(TARGET_ARCH) -I$$(call prefix-config-dir,$(config-name),) -I$(src-dir) $$(addprefix -isystem ,$(INCLUDE_DIRS)) $$(addprefix -I ,$(CORE_INCLUDE_DIRS)) $$(addprefix -I ,$$(include_dirs-$(config-name))) -c $(source-file) -o $(dest-file) -D COMPILE_TEST=$$$$i >& /dev/null || \
+	fail="$$$$fail $$$$i";\
+	echo -n ".";\
+	done; echo; \
+	if test -n "$$$$fail"; then\
+	echo "Successfully compiled $(source-file): Test(s)$$$$fail, but should not have done so (compile-time unit-test set for failure)";\
+	rm $(dest-file);\
+	exit 2; fi
+	@touch $(dest-file)
+endef
+
+# Only do this if we have a Fortran compiler
+ifneq ($(strip $(FORTRAN)),)
+
+# Rule for compiling a .o file from a .f90 or .f file
+define F-source-to-object-rule
+  $(eval source-file:=$1)
+  $(eval config-name:=$2)
+  $(eval dest-file:=$(call F-source-to-object,$(source-file),$(config-name)))
+$(dest-file): $(source-file) $(CURDIR)/$(config-name)/date
+	@echo "Compiling $(source-file)"
+	@$(FC) $(FCFLAGS) -I$$(call prefix-config-dir,$(config-name),) -I$(src-dir) $$(addprefix -isystem ,$(INCLUDE_DIRS)) $$(addprefix -I ,$(CORE_INCLUDE_DIRS)) $$(addprefix -I ,$$(include_dirs-$(config-name))) -c $(source-file) -o $(dest-file)
+endef
+
+endif
+
+# $(call source-to-module, source-file-list, config-name)
+# Filename for specifying which modules are required for a .C file
+source-to-module = $(call config-specific-name,$(patsubst %.C,%.modules,$1),$2)
+
+# $(call get-all-dirs, directory, config-name)
+# Add the given directory to the list of include directories
+# for the given configuration
+define get-all-dirs
+  $(eval configname:=$(strip $2))
+  $(eval include_dirs-$(configname) += $1)
+endef
+
+# $(call get-headers, directory, config-name)
+# Get all header files (with extension .H) and add them to the list of headers for this configuration
+# We ignore any headers ending Templates.H as these shouldn't be compiled on their own
+define get-headers
+  $(eval configname:=$(strip $2))
+  $(eval local_head:= $(filter-out %Templates.H,$(wildcard $1/*.H)))
+  $(eval headers-$(configname) += $(local_head))
+endef
+
+# $(call get-sources, directory, config-name)
+#Just get all files with extension .C and add them to the list of sources for this configuration
+#filtering out all unit-tests
+define get-sources
+  $(eval configname:=$(strip $2))
+  $(eval local_src:= $(filter-out %Test.C,$(wildcard $1/*.C)))
+
+ifneq ($(strip $(FORTRAN)),)
+  $(eval local_src_F:= $(wildcard $1/*.f90) $(wildcard $1/*.f))
+endif
+
+  $(eval sources-$(configname) += $(local_src) $(local_src_F))
+endef
+
+#Same as for get-sources, but do not filter out tests, but remove Driver.C
+#as that defines a main() which we want to replace by the Boost test main()
+#We also ignore non-compiling unit-test files.
+define get-test-sources
+  $(eval configname:=$(strip $2))
+  $(eval local_src:= $(filter-out %Driver.C %NoCompileTest.C,$(wildcard $1/*.C)))
+  $(eval test-sources-$(configname) += $(local_src))
+endef
+
+#Same as for get-sources, but only collect failing compilation tests
+define get-test-nocompile-sources
+  $(eval configname:=$(strip $2))
+  $(eval local_src:= $(wildcard $1/*NoCompileTest.C))
+  $(eval test-nocompile-sources-$(configname) += $(local_src))
+endef
+
+# Modules that are enabled for every configuration
+DEFAULT_MODULES:= Flagging                 \
+                  Flagging/Difference      \
+                  ForcingTerm              \
+                  Output                   \
+                  Output/HDF               \
+                  Clustering               \
+                  Clustering/Rigoutsos     \
+                  BoxReduction             \
+                  BoxReduction/Exhaustive  \
+                  BoxReduction/JoinBoxes   \
+                  LoadBalance              \
+                  LoadBalance/PeanoHilbert \
+                  CoordMapping             \
+                  CoordMapping/Cartesian   \
+                  Patches/AmrMappingPatch  \
+                  BoundaryCondition
+
+
+# $(call module-define, config-name)
+#Get modules for this configuration from modules file, remove any that are commented out
+# with #s and put all onto one line
+# The sed script, for lines of the form A/B/C/D, also includes A/, A/B/, and A/B/C automatically
+# and also for A/B/C including A/B automatically and A/B including A/. Extra module depth will require
+# extra nested sed expressions. We also only consider text up to teh first space,
+# assuming that anything after that is a material parameter.
+# This is then all passed to listModules that determines modules required by this module, using a special "required" file
+# in a module's directory. This is done recursively up to an arbitrary depth of 4 (to avoid circular dependencies).
+# Note that lines in the requires file starting with # are ignored.
+# Duplicate lines are then removed using sort | uniq, and then everything is put on one line.
+define module-define
+  $(eval configname := $1)
+  $(eval modules-$(configname) = $(addprefix $(src-dir)/modules/,$(DEFAULT_MODULES) \
+              $(shell getParents(){\
+                     $(SED) -e '/^#/d' -e 's/ .*//' -e 's:\(\([^/]*\)/.*$$\):\1\n\2:g' \
+                            -e 's:\(\(\([^/]*\)/[^/]*\)/.*$$\):\1\n\2\n\3:g' \
+                            -e 's:\(\(\(\([^/]*\)/[^/]*\)/[^/]*\)/.*$$\):\1\n\2\n\3\n\4:g' \
+                            -e 's:\(\(\(\(\([^/]*\)/[^/]*\)/[^/]*\)/[^/]*\)/.*$$\):\1\n\2\n\3\n\4\n\5:g'; \
+                      };\
+                      r_count=0; \
+                      listModules() {\
+                      ((r_count++)); if [[ $$r_count -gt 4 ]]; then return; fi;\
+                       while true; do\
+                          read p || break; echo $$p;\
+                          req="$(src-dir)/modules/$$p/requires"; if [[ -f $$req ]]; then listModules < $$req; ((r_count--)); fi;\
+                       done; };\
+                       listModules < <(cat $(CONFIG_DIR)/$(configname) | getParents \
+              ) | getParents |\
+              sort | sed -e 's:\(.*\)\/$$:\1:g' | uniq | tr "\n" " "))) # Sort modules and put on a single line
+   $(eval badModules-$(configname) = $(shell echo "$(modules-$(configname))" | sed 's/[A-Za-z0-9\_\/ \. -]*//g')) # Check for bad characters
+   $(eval $(if $(badModules-$(configname)),$(error Ill-formed configuration file $(CONFIG_DIR)/$(configname) Bad characters "$(badModules-$(configname))" found),)) # Abort if any found
+
+#Get names of all header files for this configuration
+  $(eval $(foreach module,$(modules-$(configname)),$(call get-headers,$(module),$(configname))))
+  $(eval $(foreach include-dir,$(INCLUDE_DIRS),$(call get-headers,$(include-dir),$(configname))))
+
+#Get names of all source files for this configuration
+  $(eval $(foreach module,$(modules-$(configname)),$(call get-sources,$(module),$(configname))))
+  $(eval $(call get-sources,$(CORE_SOURCE_DIRS),$(configname)))
+#and generate object lists
+  objects-$(configname) = $$(call C-source-to-object,$$(sources-$(configname)),$(configname))
+  objects-$(configname) += $$(call F-source-to-object,$$(sources-$(configname)),$(configname))
+# and for unoptimized code
+  debug-objects-$(configname) = $$(call C-source-to-debug-object,$$(sources-$(configname)),$(configname))
+  debug-objects-$(configname) += $$(call F-source-to-debug-object,$$(sources-$(configname)),$(configname))
+# and for optimized code with debugging on
+  debug-opt-objects-$(configname) = $$(call C-source-to-debug-opt-object,$$(sources-$(configname)),$(configname))
+  debug-opt-objects-$(configname) += $$(call F-source-to-debug-opt-object,$$(sources-$(configname)),$(configname))
+# and for a release version of the code
+  release-objects-$(configname) = $$(call C-source-to-release-object,$$(sources-$(configname)),$(configname))
+  release-objects-$(configname) += $$(call F-source-to-release-object,$$(sources-$(configname)),$(configname))
+
+ifdef HAVE_TESTS
+#Get names of all test-related source files for this configuration
+  $(eval $(foreach module,$(modules-$(configname)),$(call get-test-sources,$(module),$(configname))))
+  $(eval $(call get-test-sources,$(CORE_SOURCE_DIRS),$(configname)))
+  test-objects-$(configname) = $$(call C-source-to-object,$$(test-sources-$(configname)),$(configname))
+  test-debug-objects-$(configname) = $$(call C-source-to-debug-object,$$(test-sources-$(configname)),$(configname))
+
+  $(eval $(call get-test-nocompile-sources,$(CORE_SOURCE_DIRS),$(configname)))
+  test-nocompile-objects-$(configname) = $$(call C-source-to-object,$$(test-nocompile-sources-$(configname)),$(configname))
+endif
+
+# Get include directories for this configuration
+# including the one where configuration specific material and solver include files are stored
+  $(eval include_dirs-$(configname) = $(call config-dir,$(configname))/include)
+  $(eval $(foreach module,$(modules-$(configname)),$(call get-all-dirs,$(module),$(configname))))
+  $(eval $(call get-all-dirs,$(CORE_SOURCE_DIRS),$(configname)))
+
+#We must create a list containing all source files, both test and not, with no duplicates,
+#otherwise some files have two (identical) rules generated for them.
+  $(eval unique-sources-$(configname) = $$(call unique-sources,$(sources-$(configname)) $(test-sources-$(configname))))
+
+  dependencies-$(configname) = $$(call C-source-to-depend,$(filter %.C,$(unique-sources-$(configname))),$(configname))
+
+ifneq ($(strip $(FORTRAN)),)
+  dependencies-$(configname) += $$(call F-source-to-depend,$(filter %.f90,$(unique-sources-$(configname))),$(configname))
+  dependencies-$(configname) += $$(call F-source-to-depend,$(filter %.f,$(unique-sources-$(configname))),$(configname))
+endif
+
+  moduledependencies-$(configname) = $$(call source-to-module,$$(unique-sources-$(configname)),$(configname))
+  programs-$1 = $(call config-dir,$(configname))/$(configname)
+  testprogram-$1 = $(call config-dir,$(configname))/$(configname)-test
+  testdebugprogram-$1 = $(call config-dir,$(configname))/$(configname)-test-debug
+  debugprogram-$1 = $(call config-dir,$(configname))/$(configname)-debug
+  debugoptprogram-$1 = $(call config-dir,$(configname))/$(configname)-debug-opt
+  releaseprogram-$1 = $(call config-dir,$(configname))/$(configname)-release
+
+  all-dependencies += $$(dependencies-$(configname))
+  all-include_dirs += $$(include_dirs-$(configname))
+  all-programs += $(configname)
+
+
+#Dependencies - only include if we're trying to make this target (or all targets),
+# and it isn't a clean/reallyclean (where dependencies aren't needed)
+# and it matches CONFIG-KNOWNSUFFIX where KNOWNSUFFIX is -doc, -release, -test, etc.
+# This prevents the dependencies being expanded if one config. name is a substring of another
+# e.g. if MultiMat and MultiMat-euler exist and the former has missing modules,
+# these would be otherwise flagged on trying to compile the latter.
+ifneq ($(filter $(configname)% all%,$(MAKECMDGOALS)),)
+$(eval generic_names-$(configname):=$(patsubst $(configname)%,CONFIG%,$(filter $(configname)% all%,$(MAKECMDGOALS))))
+$(eval generic_names-$(configname)-stripped:=$(foreach n,$(generic_names-$(configname)),$(filter CONFIG,$(n))$(filter CONFIG-doc,$(n))$(filter CONFIG-release,$(n))$(filter CONFIG-debug,$(n))$(filter CONFIG-debug-opt,$(n))$(filter CONFIG-tar,$(n))$(filter CONFIG-test,$(n))$(filter CONFIG-test-debug,$(n))$(filter CONFIG-memtest,$(n))$(filter CONFIG-mpitest,$(n))))
+ifneq ($(generic_names-$(configname)-stripped),)
+ifeq ($(filter %-clean %-reallyclean,$(MAKECMDGOALS)),)
+  -include $$(dependencies-$(configname))
+endif
+endif
+endif
+
+# The $$(wordlist ...) removes the first two dependencies from the link list
+$$(programs-$(configname)):$$(objects-$(configname))
+	@echo "Linking $$@..."
+	@$(LINK.cc) $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $$@ $$^ $(CXXLIBS) $(FCLIBS)
+	@echo "Done making $(configname)"
+	@echo $(DIVIDER)
+
+# Target for Make <config-name>
+$(configname):$$(programs-$(configname))
+
+$$(debugprogram-$(configname)):$$(debug-objects-$(configname))
+	@echo "Linking $$@..."
+	@$(LINK.cc) $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $$@ $$^ $(CXXLIBS) $(FCLIBS)
+	@echo "Done making $(configname)-debug"
+	@echo $(DIVIDER)
+
+$$(debugoptprogram-$(configname)):$$(debug-opt-objects-$(configname))
+	@echo "Linking $$@..."
+	@$(LINK.cc) $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $$@ $$^ $(CXXLIBS) $(FCLIBS)
+	@echo "Done making $(configname)-debug-opt"
+	@echo $(DIVIDER)
+
+$(configname)-debug:$$(debugprogram-$(configname))
+
+$(configname)-debug-opt:$$(debugoptprogram-$(configname))
+
+$$(releaseprogram-$(configname)):$$(release-objects-$(configname))
+	@echo "Linking $$@..."
+	@$(LINK.cc) $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $$@ $$^ $(CXXLIBS) $(FCLIBS)
+	@strip $$@
+	@echo "Done making $(configname)-release"
+	@echo $(DIVIDER)
+
+$(configname)-release:$$(releaseprogram-$(configname))
+
+ifdef HAVE_TESTS
+
+# Target for generating unit-tests
+$$(testprogram-$(configname)): $$(test-objects-$(configname))
+	@echo "Linking $$@..."
+	@$(LINK.cc) $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $$@ $$^ $(CXXLIBS) $(FCLIBS)
+	@echo "Done making unit tests: $(configname)-test"
+
+# Just run the testing program - passing some useful parameters to the BOOST unit-tester
+$(configname)-test: $$(testprogram-$(configname)) $$(test-nocompile-objects-$(configname))
+	@echo $(DIVIDER)
+	@$$< $(UNIT_TEST_PARAMETERS)
+	@echo $(DIVIDER)
+
+# Target for generating unit-tests unoptimized
+$$(testdebugprogram-$(configname)): $$(test-debug-objects-$(configname))
+	@echo "Linking $$@..."
+	@$(LINK.cc) $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS) -o $$@ $$^ $(CXXLIBS) $(FCLIBS)
+	@echo "Done making unit tests: $(configname)-test-debug"
+
+# Just run the unoptimized testing program - passing some useful parameters to the BOOST unit-tester
+$(configname)-test-debug: $$(testdebugprogram-$(configname)) $$(test-nocompile-objects-$(configname))
+	@echo $(DIVIDER)
+	@$$< $(UNIT_TEST_PARAMETERS)
+	@echo $(DIVIDER)
+
+ifdef HAVE_MPI
+# We run a few versions of MPI tests for various numbers of processors
+$(configname)-mpitest:$$(testprogram-$(configname))
+	@echo Running MPI unit-tests
+	@for procs in 1 2 3 4 5 6 7 8 9; do \
+	echo $(DIVIDER); \
+	echo Testing on "$$$$procs" Processors; \
+	echo $(DIVIDER); \
+	$(MPIRUN) $(MPIRUN_OPTS) -np $$$$procs $$< $(UNIT_TEST_PARAMETERS) --run_test=*/*_MPI; \
+	done
+endif
+
+ifdef HAVE_VALGRIND
+# Test for memory leaks etc. using Valgrind
+# The valgrind test suppresses errors from MPI implementations leaking memory, and one from the Boost testing framework
+$(configname)-memtest:$$(testprogram-$(configname))
+	@echo $(DIVIDER)
+	@echo Testing for memory errors using Valgrind
+	@echo $(DIVIDER)
+	@$(VALGRIND) --leak-check=full --show-reachable=yes --num-callers=50 --suppressions=$(MAKE_DIR)suppressions.valgrind $$< $(UNIT_TEST_PARAMETERS)
+endif # ifdef VALGRIND
+
+endif # ifdef HAVE_TESTS
+
+#Set-up directory structure for this config and check whether all specified modules actually exist
+#During the loop, we keep a flag as to whether we've found any missing modules yet,
+#and check this at the end, aborting if there's a problem.
+#The sed script just deletes the current path from the module name, which is represented by the full path.
+# The last (multi-line) command here generates simple include files based on all the system
+# solvers and materials required for this configuration.
+# The following files are created:
+# - AllMaterialClasses.H (includes IdealGas.H etc.)
+# - AllMaterialAttributes.H (includes IdealGasAttributes.H etc.)
+# - AllSystemPatches.H (includes HyperbolicSourceSystemPatches.H etc.)
+# - AllSystemProperties.H (includes HyperbolicSourceSystem.H etc.)
+# - AllSystemSolvers.H (includes HyperbolicSourceSystemSolver.H etc.)
+#
+# The files to include are determined from those modules under the directories Problem and SystemSolver
+# Any extra things in a material line, such as SPECIES=2, are stored separately, in the options array
+# so that they can be used for extra templating and including. Note the use of IFS, setting it to '\n\b',
+# so taht arrays are split on newlines rather than spaces, since we want array elements to contain spaces.
+# We also check whether the files being #include'd actually exist, and
+# produce an error if they do not.
+# We also define some Boost Pre-processor Sequences containing all material and solver names:
+# #define MATERIALS (IdealGas)(Advection)
+# so as to determine a list of class names for instantiation.
+# This is combined with any trailing options on the same line e.g.
+# Problem/IdealGas/Reactive SPECIES 2
+# invokes the existence of a typedef Reactive<2> Reactive2; so that the material-name
+# Reactive2 can be used in instantiation.
+# With this syntax, the Attributes.H file is included once for every occurence of the above type of line:
+# #define SPECIES 2
+# #include "ReactiveAttributes.H"
+# #undef SPECIES
+#
+# Further, we firstly output the files as .new versions, and only overwrite the version
+# without .new if they differ. This saves needless recompilation.
+$(call config-dir,$(configname))/date: $(CONFIG_DIR)/$(configname)
+	@if test ! -d $(call config-dir,$(configname)); then $(MKDIR) $(call config-dir,$(configname)); fi
+	@if test ! -d $(call config-dir,$(configname))/objects; then $(MKDIR) $(call config-dir,$(configname))/objects; fi
+	@allExist=1; for dir in $$(addprefix $(CURDIR)/,$(modules-$(configname))); do \
+	if test ! -d $$$$dir; then\
+	if test $$$$allExist -eq 1; then echo $$(DIVIDER); fi;\
+	strippedDirName=`echo $$$$dir | $$(SED) -e 's%$$(CURDIR)[./]*%%g'`;\
+	echo "Module" $$$$strippedDirName "does not exist!"; \
+	allExist=0;\
+	fi; done;\
+	if test $$$$allExist -eq 1; then\
+	if test ! -e $$@; then touch $$@; fi;\
+	else\
+	echo $$(DIVIDER);\
+	echo "Configuration $(configname) has missing modules - Aborting";\
+	rm -f $$@;\
+	exit 2;\
+	fi
+	@IFS=$$$$(echo -en '\n\b'); configIncludeDir=$(call config-dir,$(configname))/include;\
+	mkdir -p $$$$configIncludeDir;\
+	rm -f $$$$configIncludeDir/*.H.new;\
+	materials=(`$$(SED) -e 's% *[^ ]*=[^ ]* *%%' -e 's%/$$$$%%' -e '/^Problem/s%.*/%%p' -e 'd' $(CONFIG_DIR)/$(configname)`);\
+	options=($$$$($$(SED) $(CONFIG_DIR)/$(configname) -e '/^Problem.*=.*/s/[^ ]* \([^ ]*\)=\([^ ]*\)/\1 \2/p' -e '/^Problem/s/.*/ /p' -e 'd'));\
+	if [[ -z $$$$materials ]]; then echo -e $$(DIVIDER) "\nNo materials specified in configuration $(configname).\n"$$(DIVIDER); rm -f $$@; exit 2; fi;\
+	declare -a missingFiles;\
+	for m in $$$${materials[@]}; do file="$$$${m}.H";\
+	echo "#include \"$$$$file\"" >> $$$$configIncludeDir/AllMaterialClasses.H.new; done;\
+	for ((i=0 ; i < $$$${#materials[@]}; i++)); do m=$$$${materials[$$$$i]}; opt=$$$${options[$$$$i]};\
+	file="$$$${m}Attributes.H"; \
+	if echo $$$$opt | grep -v -q '^ '; then\
+	echo -e "#define $$$$opt\n#include \"$$$$file\"\n#undef $$$${opt%% *}" >> $$$$configIncludeDir/AllMaterialAttributes.H.new;\
+	else \
+	echo "#include \"$$$$file\"" >> $$$$configIncludeDir/AllMaterialAttributes.H.new;\
+	fi;\
+	done;\
+	systems=`$$(SED) -e '/^SystemSolver/s%.*/%%p' -e 'd' $(CONFIG_DIR)/$(configname)`;\
+	for s in $$$$systems; do file="$$$${s}SystemPatches.H"; if [[ ! -f $$(src-dir)/modules/SystemSolver/$$$$s/$$$$file ]]; then missingFiles=( $$$${missingFiles[@]} $$$$file ); fi;\
+	echo "#include \"$$$$file\"" >> $$$$configIncludeDir/AllSystemPatches.H.new; done;\
+	for s in $$$$systems; do file="$$$${s}SystemProperties.H"; if [[ ! -f $$(src-dir)/modules/SystemSolver/$$$$s/$$$$file ]]; then missingFiles=( $$$${missingFiles[@]} $$$$file ); fi;\
+	echo "#include \"$$$$file\"" >> $$$$configIncludeDir/AllSystemProperties.H.new; done;\
+	for s in $$$$systems; do file="$$$${s}SystemSolver.H"; if [[ ! -f $$(src-dir)/modules/SystemSolver/$$$$s/$$$$file ]]; then missingFiles=( $$$${missingFiles[@]} $$$$file ); fi;\
+	echo "#include \"$$$$file\"" >> $$$$configIncludeDir/AllSystemSolvers.H.new; done;\
+	echo -n "#define SYSTEMS " >> $$$$configIncludeDir/MaterialSystemMacros.H.new;\
+	for s in $$$$systems; do echo -n "($$$$s)" >> $$$$configIncludeDir/MaterialSystemMacros.H.new; done;\
+	echo -ne "\n#define MATERIALS " >> $$$$configIncludeDir/MaterialSystemMacros.H.new;\
+	materialSeq=;materialTemplSeq=;materialTypedefs=;\
+	for ((i=0 ; i < $$$${#materials[@]} ; i++)); do\
+	m=$$$${materials[$$$$i]}; opt=$$$${options[$$$$i]};\
+	optval=$$$${opt##* };\
+	if [[ -z $$$$optval ]]; then materialSeq="$$$${materialSeq}($$$$m)";\
+	else materialSeq="$$$${materialSeq}($$$$m$$$$optval)";materialTemplSeq="$$$${materialTemplSeq}($$$$m<$$$$optval>)"\
+	materialTypedefs="$$$${materialTypedefs}typedef $$$$m<$$$$optval> $$$$m$$$$optval;\n";fi;\
+	done;\
+	echo -e "$$$$materialSeq\n#define TEMPLATED_MATERIALS $$$$materialTemplSeq\n$$$$materialTypedefs\n" >> $$$$configIncludeDir/MaterialSystemMacros.H.new;\
+	for f in $$$$configIncludeDir/*.new; do \
+	if [[ ! -e $$$${f%%.new} || `diff $$$$f $$$${f%%.new}` ]]; then \
+	mv $$$$f $$$${f%%.new}; touch $$@; fi; done; \
+	if [[ $$$${#missingFiles[@]} -ne 0 ]]; then echo -e $$(DIVIDER)"\nMissing files: $$$${missingFiles[@]}\n"$$(DIVIDER); rm -f $$@; exit 2; fi
+
+#Just delete the object files, the executable, and the documentation
+$(configname)-clean:
+	@echo $(DIVIDER)
+	@echo Cleaning configuration $(configname)
+	@$(RM) $$(programs-$(configname))
+	@$(RM) $$(objects-$(configname))
+	@$(RM) $$(test-objects-$(configname))
+	@$(RM) $$(debug-objects-$(configname))
+	@$(RM) $$(debug-opt-objects-$(configname))
+	@$(RM) $$(test-debug-objects-$(configname))
+	@$(RM) -r $(call config-dir,$(configname))/doc
+
+#Delete all the object files and dependencies associated with this config.
+$(configname)-reallyclean:$(configname)-clean
+	@echo Cleaning configuration $(configname) completely
+	@$(RM) -r $(call config-dir,$(configname))
+	@echo $(DIVIDER)
+
+
+
+#Target for generating documentation
+#When substituting for src-doc,
+# we have to use @ as a delimiter as / may appear in $(src-dir)
+# and we can't "escape" $(src-dir) automatically
+$(configname)-doc:$(call config-dir,$(configname))/date
+	@echo $(DIVIDER)
+	@echo Generate documentation for $(configname)
+	@$(MKDIR) $(CURDIR)/$(configname)/doc
+	@refs=`find $(modules-$(configname)) -maxdepth 1 -name "*.bib"`;\
+	sed -e 's,CONFIGNAME,$(configname),g' -e 's,MODULEDIRS,$(modules-$(configname)) $(CORE_SOURCE_DIRS) $(CORE_INCLUDE_DIRS),g' \
+	-e '/GENERATE_TODOLIST/s/=.*/=YES/g' \
+	-e '/GENERATE_TESTLIST/s/=.*/=YES/g' \
+	-e '/GENERATE_BUGLIST/s/=.*/=$(DEBUGCODE)/g' \
+	-e '/INTERNAL_DOCS/s/=.*/=$(DEBUGCODE)/g' \
+	-e '/SRC_DIR/s@SRC_DIR@$(src-dir)@g' \
+	-e '/GENERATE_LATEX/s/=.*/=$(HAVE_LATEX)/g' \
+	-e "/OTHERREFS/s%OTHERREFS%$$$$refs%g"\
+	$(src-dir)/doc.config.template |\
+	$(DOXYGEN) - 2>&1 | grep -v "too many nodes" > $(CURDIR)/$(configname)/doc/doxygen.log
+	@if [[ "$$$$?" -ne 0 ]]; then \
+	echo "Errors in generating PDF documentation for $(configname)"; \
+	echo See $(configname)/doc/doxygen.log for details; \
+	fi
+	@if test -s $(configname)/doc/doxygen.log; then \
+	echo "Warnings present in Doxygen output - see $(configname)/doc/doxygen.log"; \
+	fi
+	@if test -e $(configname)/doc/html/_formulas.log; then \
+	echo -e "\n\n\n--------------------\n_formulas.log\n--------------------\n" >> $(configname)/doc/doxygen.log; \
+	cat $(configname)/doc/html/_formulas.log >> $(configname)/doc/doxygen.log; \
+	fi
+	@echo "Compiling LaTeX documentation"
+	-@cd $(call config-dir,$(configname))/doc/latex && $(MAKE) all >& latex_output; \
+	if [[ "$$$$?" -ne 0 ]] ; then \
+	echo "Errors in generating documentation for $(configname)"; \
+	echo -e "See $(CURDIR)/$(configname)/doc/latex/latex_output\nand $(CURDIR)/$(configname)/doc/latex/refman.log for details"; \
+	grep "TeX capacity exceeded" $(CURDIR)/$(configname)/doc/latex/refman.log >& /dev/null; \
+	if [[ "$$$$?" -eq 0 ]]; then echo -e "\nYou may need to increase the TeX pool-size.\nOpen (as root) /etc/texmf/texmf.d/95NonPath.cnf,\nset pool_size = 5000000 (or higher),\nand then run update-texmf, and try again"; fi\
+	else \
+	echo Documentation generated OK for configuration $(configname); \
+	rm -f $(call config-dir,$(configname))/doc/${1}Documentation.pdf; \
+	ln -s $(call config-dir,$(configname))/doc/latex/refman.pdf $(call config-dir,$(configname))/doc/${1}Documentation.pdf; \
+	fi
+	@echo $(DIVIDER)
+
+#Target for creating tar-ball of all specified modules, to be sent to end-user
+#Only put specific modules into tar-ball, i.e. do not automatically include modules in sub-directories of given modules
+#Also ignore errors from tar not finding files
+$(configname)-tar:
+	@echo Generate tar-ball for $(configname) ...
+	@tar -czf $(configname)/$(configname).tar.gz --ignore-failed-read --no-recursion $(addsuffix /*.[CH],$(modules-$(configname))) $(CORE_INCLUDE_DIRS)/*.[CH] 2> /dev/null
+	@echo Done
+	@echo $(DIVIDER)
+
+
+#General rules for file types
+
+#Generate dependencies rules for this configuration
+  $(eval $(foreach source-file,$(filter %.C,$(unique-sources-$(configname))),$(call C-source-to-depend-rule,$(source-file),$(configname))))
+
+ifneq ($(strip $(FORTRAN)),)
+  $(eval $(foreach source-file,$(filter %.f90,$(unique-sources-$(configname))),$(call F-source-to-depend-rule,$(source-file),$(configname))))
+  $(eval $(foreach source-file,$(filter %.f,$(unique-sources-$(configname))),$(call F-source-to-depend-rule,$(source-file),$(configname))))
+endif
+
+  $(eval $(foreach source-file,$(unique-sources-$(configname)),$(call source-to-module-rule,$(source-file),$(configname))))
+  $(eval $(foreach source-file,$(filter %.C,$(unique-sources-$(configname))),$(call C-source-to-object-rule,$(source-file),$(configname))))
+  $(eval $(foreach source-file,$(filter %.C,$(unique-sources-$(configname))),$(call C-source-to-debug-object-rule,$(source-file),$(configname))))
+  $(eval $(foreach source-file,$(filter %.C,$(unique-sources-$(configname))),$(call C-source-to-debug-opt-object-rule,$(source-file),$(configname))))
+  $(eval $(foreach source-file,$(filter %.C,$(unique-sources-$(configname))),$(call C-source-to-release-object-rule,$(source-file),$(configname))))
+  $(eval $(foreach source-file,$(filter %.C,$(test-nocompile-sources-$(configname))),$(call C-source-test-nocompile-rule,$(source-file),$(configname))))
+
+ifneq ($(strip $(FORTRAN)),)
+  $(eval $(foreach source-file,$(filter %.f90,$(unique-sources-$(configname))),$(call F-source-to-object-rule,$(source-file),$(configname))))
+  $(eval $(foreach source-file,$(filter %.f,$(unique-sources-$(configname))),$(call F-source-to-object-rule,$(source-file),$(configname))))
+endif
+
+%.cubin: %.cu
+	$(NVCC) $(CFLAGS) $(CPPFLAGS) $(CXXFLAGS) $* -o $@
+
+
+endef
+
+#System commands used - present for portability purposes
+
+MV := mv -f
+RM := rm -f
+RMDIR := rmdir
+SED := /bin/sed
+MKDIR := /bin/mkdir -p
+GREP := /bin/grep
+DOXYGEN := /lsc/opt/doxygen-1.8.0/bin/doxygen
+PYTHON:=python
+
+#Check MAKE version - bug in 3.80 that is triggered below
+$(if $(filter $(MAKE_VERSION),3.81 3.82),,$(error This Makefile requires Make 3.81 or later. If you are using Make 3.80, comment out the lines "ifneq ($$strip $$(CONFIGURATIONS),)" and associated "endif" for a simple fix.))
+
+MPIRUN ?= mpirun
+MPIRUN_OPTS= 
+
+#Divider to make output look nice
+DIVEL=__________________
+DIVIDER=$(DIVEL)$(DIVEL)$(DIVEL)$(DIVEL)$(DIVEL)
+
+# Determine Boost includes and libraries
+
+BOOST_INCLUDE_DIR:=/lsc/opt/boost-1.48.0-precise/include
+BOOST_LIB_DIR:=/lsc/opt/boost-1.48.0-precise/lib
+BOOSTLIBS:=-lboost_filesystem -lboost_unit_test_framework -lboost_system -lboost_program_options -lboost_serialization -lboost_mpi -lboost_regex -lboost_iostreams
+
+#ifneq ($(strip $(BOOST_LIB_DIR)),)
+#BOOSTLIBS:=$(call link-lib-dir,$(BOOST_LIB_DIR),$(BOOSTLIBS))
+#endif
+
+# Core directories
+# . is included so that config.h gets picked up
+
+CORE_SOURCE_DIRS:=$(src-dir)/coreSystem/src
+CORE_INCLUDE_DIRS:=$(src-dir)/coreSystem/include
+
+# Add Boost includes and libraries to compiler flags
+ifneq ($(strip $(BOOST_INCLUDE_DIR)),)
+INCLUDE_DIRS += $(BOOST_INCLUDE_DIR)
+endif
+
+ifneq ($(strip $(BOOST_LIB_DIR)),)
+CXXLIBS += -L$(BOOST_LIB_DIR) $(BOOSTLIBS)
+else
+CXXLIBS += $(BOOSTLIBS)
+endif
+
+# Add Cantera includes and libraries
+ifdef HAVE_CANTERA
+CANTERALIBS:=-lzeroD -lctnumerics -lcvode -lkinetics -lthermo -ltpx -lclib -lctbase -lctcxx
+
+ifneq ($(strip $(CANTERA_INCLUDE_DIR)),)
+INCLUDE_DIRS += $(CANTERA_INCLUDE_DIR)
+endif
+
+ifneq ($(strip $(CANTERA_LIB_DIR)),)
+CXXLIBS += -L$(CANTERA_LIB_DIR) $(CANTERALIBS)
+else
+CXXLIBS += $(CANTERALIBS)
+endif
+endif
+
+# Add MPI includes and libraries to compiler flags
+
+ifdef HAVE_MPI
+
+# Profiling and tracing hooks for MPI
+# Must be specified on compile-line before MPI libs
+# MPELIB_DIR=
+
+ifneq ($(strip $(MPELIB_DIR)),)
+MPE_TRACE_LIBS=$(MPELIB_DIR)/libtmpe.a $(MPELIB_DIR)/libmpe.a
+MPE_LOG_LIBS= $(MPELIB_DIR)/liblmpe.a $(MPELIB_DIR)/libmpe.a
+CXXLIBS += $(MPE_LOG_LIBS)
+endif
+
+# Profiling hooks for MPI via MPIP (http://mpip.sourceforge.net/) - requires libunwind
+# Set MPIPLIB_DIR on the command-line to be /opt/mpip/lib/ (or equivalent, wherever libmpiP.a is located)
+# Set MPIBFD_DIR on the command-line to be /opt/binutils/lib/ (or equivalent, wherever libbfd.a is located)
+ifdef HAVE_LIBUNWIND
+ifneq ($(strip $(MPIPLIB_DIR)),)
+ifneq ($(strip $(BFDLIB_DIR)),)
+CXXLIBS+=$(MPIPLIB_DIR)/libmpiP.a -lunwind $(BFDLIB_DIR)/libbfd.a $(BFDLIB_DIR)/libopcodes.a $(BFDLIB_DIR)/libiberty.a
+endif
+endif
+endif
+
+# Profiling and tracing hooks for Intel's MPI
+
+ifneq ($(strip $(ITC)),)
+CXXLIBS += -L$(VT_LIB_DIR) -lVT $(VT_ADD_LIBS)
+endif
+
+ifndef HAVE_MPI_COMPILER
+
+ifneq ($(strip $(MPI_INCLUDE_DIRS)),)
+INCLUDE_DIRS += $(MPI_INCLUDE_DIRS)
+endif
+
+ifneq ($(strip $(MPI_LIBRARY_DIRS)),)
+LD_LIBRARY_PATH := $(MPI_LIBRARY_DIRS):$(LD_LIBRARY_PATH)
+CXXLIBS += -L$(MPI_LIBRARY_DIRS) $(MPI_LIBS)
+else
+CXXLIBS += $(MPI_LIBS)
+endif
+
+endif # ifndef HAVE_MPI_COMPILER
+
+endif # ifdef HAVE_MPI
+
+# Add HDF includes and libraries
+
+ifdef HAVE_HDF
+
+ifneq ($(strip $(HDF_INCLUDE_DIR)),)
+INCLUDE_DIRS += $(HDF_INCLUDE_DIR)
+endif
+
+ifneq ($(strip $(HDF_LIBRARY_DIR)),)
+LD_LIBRARY_PATH := $(HDF_LIBRARY_DIR):$(LD_LIBRARY_PATH)
+CXXLIBS += -L$(HDF_LIBRARY_DIR) $(HDF_LIBS)
+else
+CXXLIBS += $(HDF_LIBS)
+endif
+
+endif # ifdef HAVE_HDF
+
+# OpenCASCADE, GDAL, and GeoTIFF library directories
+OCC_LIB_DIR:=
+VTK_LIB_DIR:=
+GDAL_INCLUDE_DIR:=
+GDAL_LIB_DIR:=
+GEOTIFF_INCLUDE_DIR:=/usr/include/geotiff
+GEOTIFF_LIB_DIR:=/usr/lib
+
+ifneq ($(strip $(OCC_LIB_DIR)),)
+CXXLIBS += -L$(OCC_LIB_DIR)
+endif
+
+ifneq ($(strip $(VTK_LIB_DIR)),)
+CXXLIBS += -L$(VTK_LIB_DIR)
+endif
+
+ifneq ($(strip $(GDAL_LIB_DIR)),)
+CXXLIBS += -L$(GDAL_LIB_DIR)
+endif
+
+ifneq ($(strip $(GDAL_INCLUDE_DIR)),)
+CPPFLAGS += -I$(GDAL_INCLUDE_DIR)
+endif
+
+ifneq ($(strip $(GEOTIFF_LIB_DIR)),)
+CXXLIBS += -L$(GEOTIFF_LIB_DIR)
+endif
+
+ifneq ($(strip $(GEOTIFF_INCLUDE_DIR)),)
+CPPFLAGS += -I$(GEOTIFF_INCLUDE_DIR)
+endif
+
+# Ensure libraries go after their directories
+CXXLIBS += -ldl -lgeotiff -ltiff -lgd -ldl 
+UNIT_TEST_PARAMETERS=--log_level=error --detect_fp_exceptions=yes --catch_system_errors=no
+
+#default target
+.PHONY: default-target all
+default-target:
+
+all-dependencies:=
+all-include_dirs=$(INCLUDE_DIRS)
+
+#Determine which configurations are present - any file in $(CONFIG_DIR) not ending in ~ (emacs temp file)
+# and not containing # (emacs autosave)
+
+CONFIG_DIR ?= $(CURDIR)/configurations
+
+CONFIGURATIONS:=$(patsubst $(CONFIG_DIR)/%,%,$(wildcard $(CONFIG_DIR)/[^\#]*[^~]))
+
+#Generate rules for configurations mentioned on the command-line
+# We use MAKECMDGOALS which contains the list of targets,
+# and only generate the list of dependencies for a target if it's mentioned on the cmd-line (or if 'all' is mentioned)
+# This includes usages such as /home/.../ideal_2D/objects/_modules_Flagging_Flagging.o since "ideal_2D" is present.
+# The filter for all only matches a whole word, useful if a configuration includes the substring 'all'.
+# The match for all- is required to match any of the extensions of all- given below
+# There will still be a problem if there is a configuration called 'all-*'.
+ifneq ($strip $(CONFIGURATIONS),)
+  $(foreach c,$(CONFIGURATIONS),$(if $(findstring $c,$(MAKECMDGOALS))$(filter all,$(MAKECMDGOALS))$(findstring all-,$(MAKECMDGOALS)),$(eval $(call module-define,$(strip $c))),))
+
+all: $(CONFIGURATIONS)
+all-release: $(addsuffix -release,$(CONFIGURATIONS))
+all-debug: $(addsuffix -debug,$(CONFIGURATIONS))
+all-debug-opt: $(addsuffix -debug-opt,$(CONFIGURATIONS))
+all-clean: $(addsuffix -clean,$(CONFIGURATIONS))
+all-reallyclean: $(addsuffix -reallyclean,$(CONFIGURATIONS))
+all-doc: $(addsuffix -doc,$(CONFIGURATIONS))
+all-tar: $(addsuffix -tar,$(CONFIGURATIONS))
+ifdef HAVE_TESTS
+
+all-test: $(addsuffix -test,$(CONFIGURATIONS))
+
+ifdef HAVE_MPI
+all-mpitest: $(addsuffix -mpitest,$(CONFIGURATIONS))
+endif
+
+ifdef HAVE_VALGRIND
+all-memtest: $(addsuffix -memtest,$(CONFIGURATIONS))
+endif
+
+endif #ifdef HAVE_TESTS
+endif #if configurations non-empty
+
+default-target:
+ifeq ($(strip $(CONFIGURATIONS)),)
+	@echo $(DIVIDER)
+	@echo No configurations defined
+	@echo Please create a "modules" file $(CONFIG_DIR)/[CONFIGNAME]
+	@echo $(DIVIDER)
+else
+	@echo $(DIVIDER)
+	@echo Available configurations are: $(CONFIGURATIONS)
+	@echo Use $(MAKE) \<configuration\>
+	@echo $(DIVIDER)
+	@echo $(MAKE) help lists all available options
+endif
+
+CXXFLAGS += $(addprefix -I ,$(sort $(all-include_dirs)))
+vpath %.H $(all-include_dirs)
+
+#Files not to optimize
+#NO_OPT=core/Driver.C
+#$(patsubst %.C,%.o,$(NO_OPT)): CPPFLAGS += -O0
+
+.PHONY: test-suite
+# VisIt plugin is used in test-suite
+test-suite: visit-plugin
+	cd test-suite && $(PYTHON) ./test-suite.py
+
+ifdef HAVE_VISIT
+.PHONY: visit-plugin visit-plugin-global
+
+# Generate CMakeLists.txt using xml2cmake from VisIt, and then make as usual
+# Note: The check for VisIt 2.5.0 and resulting sed script are needed due to a bug in the 2.5.0 release
+# (which should be fixed in 2.5.1)
+visit-plugin: cnsVisIt/cns-config.h
+	@if [[ $(VISIT_VERSION) -eq 1 ]]; then \
+	cd cnsVisIt; \
+	xml2makefile -v $(VISIT_FULL_VERSION) -clobber cnsVisIt.xml ; \
+	xml2info -v $(VISIT_FULL_VERSION) -clobber cnsVisIt.xml ; \
+	make HDF_LIBS="$(HDF_LIBS)" HDF_INCLUDE_DIR="$(VISIT_HDF_INCLUDE_DIR)" HDF_LIBRARY_DIR="$(VISIT_HDF_LIBRARY_DIR)"; \
+	else if which xml2cmake > /dev/null; then \
+	cd cnsVisIt; \
+	export HDF_INCLUDE_DIR="$(VISIT_HDF_INCLUDE_DIR)" && \
+	xml2cmake -v $(VISIT_FULL_VERSION) -clobber cnsVisIt2.xml; \
+	if [[ "$(VISIT_FULL_VERSION)" = "2.5.0" ]]; then \
+	sed -i '/RTOD/s/RTOD(databases /PREFIX(/g' CMakeLists.txt; fi; \
+	xml2info -v $(VISIT_FULL_VERSION) -clobber cnsVisIt2.xml; \
+	 -DCMAKE_C_COMPILER=$(CC) .; \
+	make HDF_LIBS="$(HDF_LIBS)" HDF_INCLUDE_DIR="$(VISIT_HDF_INCLUDE_DIR)" HDF_LIBRARY_DIR="$(VISIT_HDF_LIBRARY_DIR)"; \
+	fi; \
+	fi; \
+	if [[ $$? -eq 2 ]]; then \
+	echo "---------------------------------------------------"; \
+	echo "Error in compiling VisIt plugin."; \
+	echo "If the error comes from a failed link to avtdatabase_par, then see INSTALL_3RDPARTY for instructions.";\
+	fi;
+
+visit-plugin-global: cnsVisIt/cns-config.h
+	@if [[ $(VISIT_VERSION) -eq 1 ]]; then \
+	cd cnsVisIt; \
+	xml2makefile -v $(VISIT_FULL_VERSION) -clobber cnsVisIt.xml ; \
+	xml2info -v $(VISIT_FULL_VERSION) -clobber cnsVisIt.xml ; \
+	make HDF_LIBS="$(HDF_LIBS)" HDF_INCLUDE_DIR="$(VISIT_HDF_INCLUDE_DIR)" HDF_LIBRARY_DIR="$(VISIT_HDF_LIBRARY_DIR)"; \
+	else \
+	if which xml2cmake > /dev/null; then \
+	cd cnsVisIt; \
+	export HDF_INCLUDE_DIR="$(VISIT_HDF_INCLUDE_DIR)"; \
+	xml2cmake -v $(VISIT_FULL_VERSION) -clobber -public cnsVisIt2.xml; \
+	if [[ "$(VISIT_FULL_VERSION)" = "2.5.0" ]]; then \
+	sed -i '/RTOD/s/RTOD(databases /PREFIX(/g' CMakeLists.txt; fi; \
+	xml2info -v $(VISIT_FULL_VERSION) -clobber cnsVisIt2.xml; \
+	 -DCMAKE_C_COMPILER=$(CC) . ; \
+	sudo make HDF_LIBS="$(HDF_LIBS)" HDF_INCLUDE_DIR="$(VISIT_HDF_INCLUDE_DIR)" HDF_LIBRARY_DIR="$(VISIT_HDF_LIBRARY_DIR)"; \
+	else \
+	echo -e "Error in compiling VisIt plugin:\nxml2cmake and/or xml2info (from VisIt) are not in your PATH."; exit 2;\
+	fi;\
+	fi; \
+	if [[ $$? -eq 2 ]]; then \
+	echo "---------------------------------------------------"; \
+	echo "Error in compiling VisIt plugin."; \
+	echo "If the error comes from a failed link to avtdatabase_par, then see INSTALL_3RDPARTY for instructions.";\
+	fi;
+
+
+cnsVisIt/cns-config.h:cns-config.h
+	@rm -f cnsVisIt/cns-config.h
+	@grep -v "HAVE_MPI" cns-config.h >> cnsVisIt/cns-config.h
+
+endif
+
+ifdef HAVE_PARAVIEW
+.PHONY: paraview-plugin paraview-plugin-install paraview-plugin-global
+
+# Installed plugins on locally-built version go under bin/plugins
+cnsParaView/libcnsVisItReader.so: cnsVisIt/cns-config.h
+	@cd cnsParaView; \
+	cmake -C CMakeOpts .; \
+	make
+	@if [[ ! -d ${PARAVIEW_BUILD_DIR}/bin/plugins ]]; then $(MKDIR) ${PARAVIEW_BUILD_DIR}/bin/plugins; fi
+	@cp cnsParaView/libcnsVisItReader.so ${PARAVIEW_BUILD_DIR}/bin/plugins
+
+paraview-plugin: cnsParaView/libcnsVisItReader.so
+
+# For installed version, under ./plugins/
+# Assume sudo necessary
+paraview-plugin-global: paraview-plugin
+	@if [[ ! -d ${PARAVIEW_DIR}/plugins ]]; then sudo $(MKDIR) ${PARAVIEW_DIR}/plugins; fi;\
+	sudo cp cnsParaView/libcnsVisItReader.so ${PARAVIEW_DIR}/plugins/;
+
+endif
+
+.PHONY:help
+
+help:
+	@echo $(DIVIDER)
+	@echo LSC-AMR Package Configuration Tool
+	@echo $(DIVIDER)
+	@echo The following options are always available:
+	@echo "help               : Prints this help"
+	@echo "visit-plugin       : Compiles and installs plugin for VisIt in user's home directory"
+	@echo "visit-plugin-global: Compiles and installs plugin globally for all users of VisIt on this machine. This will ask for your (sudo) password as appropriate."
+	@echo "paraview-plugin    : Compiles and installs ParaView plugin in locally built ParaView"
+	@echo "paraview-plugin-global : Compiles and installs ParaView plugin in global ParaView"
+	@echo "test-suite         : Runs full test-suite. Takes a few days to run completely."
+	@echo $(DIVIDER)
+	@echo The configuration specific options are listed below:
+	@echo In order to use a different configurations directory, set the environment variable \$$CONFIG_DIR
+	@echo $(DIVIDER)
+	@echo The following configurations are currently defined:
+	@for f in $(CONFIGURATIONS); do echo $$f; done
+	@echo $(DIVIDER)
+	@echo There are various options for each configuration.
+	@echo In order to run them, use $(MAKE) \<config-name\>-\<option\>
+	@echo Valid options are
+	@echo "  <blank>          : Compile the executable for the configuration"
+	@echo "  -doc             : Creates documentation for the configuration"
+	@echo "  -release         : Compile a stripped (i.e. no debug-info) executable (suffixed with -release) for the configuration, with full optimization"
+	@echo "  -debug           : Compile the executable (suffixed with -debug) for the configuration, with no optimization, and with extra run-time checks"
+	@echo "  -debug-opt       : Compile the executable (suffixed with -debug-opt) for the configuration, with optimization, and with extra run-time checks"
+	@echo "  -clean           : Deletes the object files, the configuration executable, and its documentation"
+	@echo "  -tar             : Creates tar-ball for easy packaging of configuration"
+ifdef HAVE_TESTS
+	@echo "  -test            : Compiles and runs all available unit-tests for the configuration"
+	@echo "  -test-debug      : Compiles and runs all available unit-tests for the configuration without optimization"
+ifdef HAVE_VALGRIND
+	@echo "  -memtest         : Runs unit-tests with valgrind to test for memory leaks"
+endif
+
+ifdef HAVE_MPI
+	@echo "  -mpitest         : Runs unit-tests on multiple processes"
+endif
+
+endif #ifdef HAVE_TESTS
+	@echo "  -reallyclean     : As for -clean, AND delete all dependencies, and the complete configuration dierctory"
+	@echo $(DIVIDER)
+	@echo Replacing \<config-name\> by all performs the given command for all configurations found.
+	@echo $(DIVIDER)
+	@echo The following environment variables may be of use for developers:
+	@echo "  ITC              : If this is non-empty, then the Intel trace libraries will be linked in."
+	@echo "                     This only affects the linking stage. If enabled, a trace-file will be dumped on finishing."
+	@echo "  MPELIB_DIR       : If this is non-empty, then the MPE libraries are linked in from this directory."
+	@echo "  MPIPLIB_DIR      : If this is non-empty, and so is BFDLIB_DIR, then the mpiP (http://mpip.sourceforge.net/) libraries are linked in from this directory."
+	@echo "  BFDLIB_DIR         The mpiP directory needs to contain libmpiP.a and the BFD directory (from binutils - GNU development tools) needs to contain libbfd.a"
+	@echo "                     (Requires libunwind - detected by configure, so you may need to install libunwind and rerun configure.)"
+	@echo $(DIVIDER)
