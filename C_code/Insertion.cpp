@@ -39,7 +39,7 @@ void insertionSort(){
 	//using loops
 	vector<int>	numbers(10);
 	for (int i = 0; i < 10; i++ ){
-		numbers[i] = rand() % 10;
+		numbers[i] = rand() % 100;
 	}	
 
 	for (int i = 0; i < numbers.size(); i++){
@@ -53,14 +53,14 @@ void insertionSort(){
 	int key, index;
 	for(int j = 1; j < numbers.size(); j++)
 	{
-		key = j;	
+		key = numbers[j];	
 		//insert A[j] into the sorted sequence 
 		index = j - 1;	
 		while (index > -1 && numbers[index] > key){
 			numbers[index + 1] = numbers[index];
 			index--;
 		}
-		numbers[index+1] = key;
+		numbers[index + 1] = key;
 	}
 
 	printList(numbers);
