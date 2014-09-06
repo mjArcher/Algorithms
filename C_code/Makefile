@@ -4,16 +4,17 @@
 CUDA:=
 CPPFLAGS=-g -Wall# $(shell root-config --cflags)
 LDFLAGS=-g #$(shell root-config --ldflags)
-LDLIBS=#$(shell root-config --libs)
+LDLIBS=-I ~/Libraries/eigen/ -I ~/Libraries/ -lconfig++ 
+# LDLIBS=	#$(shell root-config --libs)
 
 SRCS=Sort.cpp Test.cpp
 OBJS=$(subst .cpp,.o,$(SRCS))#substitutes all .cpp in SRCS variable with .o (objects)
 
-Test: $(OBJS)
-    g++ $(LDFLAGS) -o Test Test.o Sort.o $(LDLIBS) 
+Test:	$(OBJS)
+	g++	$(LDFLAGS) -o Test Test.o Sort.o $(LDLIBS) 
 
-Test.o: Test.cpp Test.h Sort.h
-    g++ $(CPPFLAGS) -c Test.cpp
+Test.o:	Test.cpp Test.h Sort.h
+	g++	$(CPPFLAGS) -c Test.cpp $(LDLIBS)
 
-Sort.o: Sort.cpp Sort.h
-    g++ $(CPPFLAGS) -c Sort.cpp 
+Sort.o:	Sort.cpp Sort.h
+	g++	$(CPPFLAGS) -c Sort.cpp $(LDLIBS)
