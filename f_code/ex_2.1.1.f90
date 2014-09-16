@@ -1,4 +1,3 @@
-PROGRAM Main
     IMPLICIT NONE
     INTEGER, PARAMETER :: dp = SELECTED_REAL_KIND(12)
     REAL(KIND=dp), ALLOCATABLE :: input(:,:), output(:,:)
@@ -7,8 +6,8 @@ PROGRAM Main
 
 ! Read the file name from the argument and set up the data.
     IF (COMMAND_ARGUMENT_COUNT() /= 1) THEN
-        WRITE (*,'("Wrong number of arguments")')
-        STOP
+      WRITE (*,'("Wrong number of arguments")')
+      STOP
     END IF
     CALL GET_COMMAND_ARGUMENT(1,filename)
     OPEN (42,FILE=filename,ACTION='READ',FORM='UNFORMATTED')
@@ -56,10 +55,10 @@ CONTAINS
         last_wall = m/REAL(n,KIND=dp)
         CALL CPU_TIME(last_cpu)
         IF (LEN(which) > 0) THEN
-            wall = last_wall-wall
-            cpu = last_cpu-cpu
-            WRITE (*,'(A," time = ",F0.2," seconds, CPU = ",F0.2," seconds")') &
-                which,wall,cpu
+          wall = last_wall-wall
+          cpu = last_cpu-cpu
+          WRITE (*,'(A," time = ",F0.2," seconds, CPU = ",F0.2," seconds")') &
+            which,wall,cpu
         END IF
     END SUBROUTINE Times
 
@@ -72,10 +71,10 @@ CONTAINS
         trace = 0.0
         size = UBOUND(matrix,1)
         DO n = 1,size
-            trace = trace+matrix(n,n)
+        trace = trace+matrix(n,n)
         END DO
         WRITE (*,'("Checking values = ",F0.3,2(", ",F0.3))') &
-            trace, matrix(1,size), matrix(size,1)
+          trace, matrix(1,size), matrix(size,1)
     END SUBROUTINE Check
 
     SUBROUTINE Multiply (left, right, out)
@@ -88,9 +87,9 @@ CONTAINS
 ! do what is wanted.
 !$OMP PARALLEL DO DEFAULT(NONE), SHARED(out,left,right), PRIVATE(i,j)
         DO i = 1,UBOUND(left,1)
-            DO j = 1,UBOUND(right,2)
-                out(i,j) = DOT_PRODUCT(left(i,:),right(:,j))
-            END DO
+          DO j = 1,UBOUND(right,2)
+            out(i,j) = DOT_PRODUCT(left(i,:),right(:,j))
+          END DO
         END DO
 !$OMP END PARALLEL DO
     END SUBROUTINE Multiply
