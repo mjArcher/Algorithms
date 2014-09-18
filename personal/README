@@ -1,0 +1,10 @@
+basic algorithms from Cormen book coded for reference purposes - Started Sept 2014
+
+
+aim is to code:
+
+--insertion sort
+--merge sort
+--quicksort
+
+in C++ and Fortran

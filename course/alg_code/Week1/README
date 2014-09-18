@@ -1,0 +1,2 @@
+union slow
+union weighted - some tree descrimination, make sure that the smaller tree always goes below the larger tree (rather than the other way).
