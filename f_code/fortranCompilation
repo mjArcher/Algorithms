@@ -1,7 +1,0 @@
-to compile it is possible to use f90, f95, gfortran etc
-
-example. Compiling using fortran 95 and linking to blas, and lapack
-
-f95 test.f90 -o test -llapack -lblas -lgfortran
-
-
