@@ -65,7 +65,6 @@ public class QuickUnionWeightedUF
     test.union(9, 4);
     test.union(2, 1);
     test.printArray();
-    
   }
 }
 
