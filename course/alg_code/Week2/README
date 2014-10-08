@@ -1,0 +1,33 @@
+//loitering
+observed in array implementation of stack
+Set removed item to null
+garbage collector can reclaim memory only if no outstanding references 
+//basic array implementation of stacks
+//resizing arrays
+how to grow and shrink array?
+Increase array size each time capacity is exceeded - this is ~ N^2
+double array size  this is only ~N
+Stack: amortized cost of adding to a stack
+How to shrink an array
+naive, try halving
+get a phenomenon called `Thrashing', constant resizing of array 
+wait until an array gets 1/4 full until you halve it
+INVARIANT: array is always between 25% and 100% full
+
+Implemented 
+LinkedStackOfStrings.java
+ResizingArrayStackOfStrings.java
+
+Using Generics and Iterators
+
+Stack
+FixedCapacityStack
+
+Iterators + generics 
+
+StackIterator
+StackArrayIterator
+
+Test (examines functionality of Stack and Fixed Capacity stack)
+
+ 

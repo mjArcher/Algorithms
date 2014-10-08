@@ -6,3 +6,32 @@ QuickFindUF
 QuickUnionUF
 QuickUnionWeightedUF
 
+//
+observations
+mathematical models
+order of growth
+Theory of algorithms
+Memory
+
+//1.3
+stacks and queues
+stack - LIFO, examine the item most recently added
+queue - FIFO, examine the item least recently added 
+
+//modular programming
+separate interface and implementation
+stacks and queues precisely defined, separate implementation from client
+many different implementations from whcich to choose
+implementation cannot know the details of the client needs
+many clients can reuse the same implementations
+allows us to create modular reusable algorithms and focus on performance
+this is a modular programming style enabled by OOP java
+
+//stacks
+
+collection of strings
+ability to save away a collection of strings and remove and return most recently added strings periodically
+introduced the linked-list implementation in Java
+
+
+
