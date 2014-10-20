@@ -1,5 +1,9 @@
 import java.util.Iterator;
 
+//a basic stack using the iterable functionality (using Linked lists)
+//details the principle of FIFO functionality (as opposed to a queue)
+//
+
 public class StackIterator<Item> implements Iterable<Item>
 {
   public Iterator<Item> iterator()
@@ -13,6 +17,23 @@ public class StackIterator<Item> implements Iterable<Item>
     Node next;
   }
 
+  private Node first = null;
+
+  public void push(Item item)
+  {
+    Node oldfirst = first;
+    first = new Node();
+    first.item = item;
+    first.next = oldfirst;
+  }
+
+  public Item pop()
+  {
+    Item item = first.item;
+    first = first.next;
+    return item;
+  }
+  
   private class ListIterator implements Iterator<Item>
   {
     Node current = first;
@@ -35,6 +56,7 @@ public class StackIterator<Item> implements Iterable<Item>
       return item;
     }
   }
+
 }
 
 

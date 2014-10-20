@@ -20,13 +20,13 @@ ResizingArrayStackOfStrings.java
 
 Using Generics and Iterators
 
-Stack
-FixedCapacityStack
+Stack.java (using linkedlist)
+FixedCapacityStack.java (using arrays)
 
 Iterators + generics 
 
-StackIterator
-StackArrayIterator
+StackIterator (implements iterable)
+StackArrayIterator (as above)
 
 Test (examines functionality of Stack and Fixed Capacity stack)
 

@@ -7,7 +7,7 @@ public class FixedCapacityStack<Item>
 
   public FixedCapacityStack(int capacity)
   {
-    s = (Item[]) new Object[capacity]; //this is a horrendous piece of code
+    s = (Item[]) new Object[capacity]; //this is a horrendous piece of code - a very ugly cast
   }
 
   public boolean isEmpty()
