@@ -1,6 +1,6 @@
 import java.util.Iterator;
 
-public class Stack<Item> implements Iterable<Item>
+public class StackArray<Item> implements Iterable<Item>
 {
   public Iterator<Item> iterator() 
   {

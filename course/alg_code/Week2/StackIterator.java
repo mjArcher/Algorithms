@@ -1,15 +1,21 @@
 import java.util.Iterator;
 
-public class Stack<Item> implements Iterable<Item>
+public class StackIterator<Item> implements Iterable<Item>
 {
-  
-  public Iterator<Item> iterator() {
+  public Iterator<Item> iterator()
+  {
     return new ListIterator();
+  }
+
+  private class Node
+  {
+    Item item;
+    Node next;
   }
 
   private class ListIterator implements Iterator<Item>
   {
-    private Node current = first;
+    Node current = first;
 
     public boolean hasNext()
     {
@@ -23,6 +29,7 @@ public class Stack<Item> implements Iterable<Item>
 
     public Item next()
     {
+      System.out.println("Next");
       Item item = current.item;
       current = current.next;
       return item;
@@ -31,31 +38,3 @@ public class Stack<Item> implements Iterable<Item>
 }
 
 
-  private Node first = null;
-
-  private class Node
-  {
-    Item item;
-    Node next;
-  }
-
-  public boolean isEmpty()
-  {
-    return first == null;
-  }
-
-  public void push(Item item)
-  {
-    Node oldfirst = first;
-    first = new Node();
-    first.item = item;
-    first.next = oldfirst;
-  }
-
-  public Item pop()
-  {
-    Item item = first.item;
-    first = first.next;
-    return item;
-  }
-}
