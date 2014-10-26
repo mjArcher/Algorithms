@@ -41,7 +41,6 @@ class Test {
     //
    
     //equivalent code
-    //
     StackIterator<Integer> integerStack = new StackIterator<Integer>(); //this is just the linkedlist part of the code
      
     integerStack.push(17); //s.push(new Integer(17));
