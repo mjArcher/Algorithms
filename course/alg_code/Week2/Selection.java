@@ -32,11 +32,11 @@ public class Selection
     a[j] = swap;
   }
 
-  public static int[] createRandomArray(int size)
+  public static Integer[] createRandomArray(int size)
   {
     //create simple random array and sort
     List<Integer> list = new ArrayList<Integer>();
-    for (int i = 1; i < size; i++) {
+    for (int i = 0; i < size; i++) {
       list.add(i);
     }
 
@@ -47,7 +47,7 @@ public class Selection
     Integer[] array1 = list.toArray(new Integer[list.size()]);
 
     // Get an int[] array
-    int[] array2 = new int[list.size()];
+    Integer[] array2 = new Integer[list.size()];
     for (int i = 0; i < list.size(); i++) {
       array2[i] = list.get(i);
     }
@@ -56,7 +56,7 @@ public class Selection
 
   public static void main(String[] args)
   {
-    int[] array = createRandomArray(10);
+    Integer[] array = createRandomArray(10);
     for (int i = 0; i < 10; i++)
       System.out.println(array[i]);
 
