@@ -1,6 +1,7 @@
 import java.util.ArrayList; //can change size dynamically, cannot work with primitive types (use wrappers instead??)
 import java.util.List;
 import java.util.Collections;
+import java.util.Random;
 
 public class Merge
 {
@@ -8,6 +9,7 @@ public class Merge
   private static void merge(Comparable[] a, Comparable[] aux, int lo, int mid, int hi)
   {
     // System.out.println("Low " + lo + " mid " + mid + " high " + hi);
+    System.out.println("merge(a, " + lo + ", " + mid + ", " + hi + ")");
     assert isSorted(a, lo, mid); // precondition a[lo..mid] sorted
     assert isSorted(a, mid+1, hi); // precondition: a[mid+1..hi] sorted
 
@@ -92,16 +94,36 @@ public class Merge
     return array2;
   }
 
+  public static Integer[] createRandomArray2(int size)
+  {
+
+    Random generator = new Random();
+
+    Integer[] array = new Integer[size];
+
+    for(int i = 0; i < size; i++)
+    {
+      array[i] = generator.nextInt(size);
+    }
+
+    return array;
+
+  }
+
   public static void main(String[] args)
   {
-    System.out.println("Sort the list using merge sort");
+    if (args.length < 1){
+      System.out.println("Insufficient parameters, args = " + args.length);
+      return;
+    }
+
+    System.out.println("Sort the integers using merge sort");
     int size = Integer.parseInt(args[0]);
     long startTime = System.nanoTime();
     //create array and auxillary array
-    Integer[] array = createRandomArray(size);
+    Integer[] array = createRandomArray2(size);
     for (int i = 0; i < size; i++)
       System.out.println(array[i]);
-    Integer[] arrayAux = new Integer[array.length]; 
     //sort array
     Merge sorter = new Merge();
 
@@ -109,9 +131,30 @@ public class Merge
     long endTime = System.nanoTime();
     long duration = (endTime - startTime);
     //time to sort 
-    System.out.println("Time to sort = " + duration );
+    System.out.println("Time to sort = " + duration);
 
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < size; i++)
       System.out.println(array[i]);
+
+    System.out.println("Sort the characters using merge sort");
+
+    String mergeExample = "MERGESORTEXAMPLE"; //I think in C++ we can access each character form the string array
+    //in java we cannot do this and must deal explicitly with character arrays
+
+    char[] initial = mergeExample.toCharArray(); //does the char[] support comparable like Integer does?
+
+    Character[] array2 = new Character[mergeExample.length()];
+
+    for(int i = 0; i < mergeExample.length(); i++)
+     array2[i] = initial[i]; 
+
+    //print out the character array
+    for(int i = 0; i < mergeExample.length(); i++)
+      System.out.println(array2[i]);
+    
+    sorter.sort(array2);
+
+    for(int i = 0; i < mergeExample.length(); i++)
+      System.out.println(array2[i]);
   }
 }
