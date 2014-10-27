@@ -1,25 +1,29 @@
 import java.util.ArrayList; //can change size dynamically, cannot work with primitive types (use wrappers instead??)
 import java.util.List;
 import java.util.Collections;
-
-
-public class Selection 
+public class Shell
 {
   public static void sort(Comparable[] a)
   {
     int N = a.length;
-    for (int i = 0; i < N; i++) //loop over all elements in a
+
+    int h = 1;
+    while (h < N/3)
+      h = 3*h + 1; // 1, 4, 13, 40, 121, 364, ...
+
+    // this part here is just insertion sort
+    while (h >= 1)
     {
-      int min = i;
-      for (int j = i + 1; j < N; j++) //increment the search to be the next one along
-        if (less(a[j], a[min]))
-          min = j;
-      exch(a, i, min);
+      for (int i = h; i < N; i++)
+      {
+        for (int j = i; j >= h && less(a[j], a[j-h]); j -= h)
+          exch(a, j, j-h);
+      }
+
+      h = h/3;
     }
   }
 
-  //need to implement less and exch
-  //helper functions
   private static boolean less(Comparable v, Comparable w)
   {
     return v.compareTo(w) < 0;
@@ -56,17 +60,25 @@ public class Selection
 
   public static void main(String[] args)
   {
-    Integer[] array = createRandomArray(10);
-    for (int i = 0; i < 10; i++)
-      System.out.println(array[i]);
+    
+    int size = Integer.parseInt(args[0]);
+    Integer[] array = createRandomArray(size);//integer implements comparable
+    // for (int i = 0; i < size; i++)
+    //   System.out.println(array[i]);
 
-    System.out.println("Sort the list");
+    System.out.println("Sort the list containing " + size + " items");
+    
 
-    Selection sorter = new Selection();
+    Shell sorter = new Shell();
+
+    //this code is the same for all sorting classes 
+    long startTime = System.nanoTime();
     sorter.sort(array);
+    long endTime = System.nanoTime();
+    long duration = (endTime - startTime);
+    System.out.println("Time to sort = " + duration/10.e9 + " seconds");
 
-    for (int i = 0; i < 10; i++)
-      System.out.println(array[i]);
+    // for(int i = 0; i < size; i++)
+    //   System.out.println(array[i]);
   }
-
 }

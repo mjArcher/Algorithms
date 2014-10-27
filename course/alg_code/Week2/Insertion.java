@@ -56,8 +56,11 @@ public class Insertion
 
     System.out.println("Sort the list");
 
-    Insertion ins = new Insertion();
-    ins.sort(array);
+    long startTime = System.nanoTime();
+    sorter.sort(array);
+    long endTime = System.nanoTime();
+    long duration = (endTime - startTime);
+    System.out.println("Time to sort = " + duration );
 
     for(int i = 0; i < size; i++)
       System.out.println(array[i]);
