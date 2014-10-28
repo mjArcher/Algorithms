@@ -56,6 +56,7 @@ class Test {
     }
 
     //alternatively we can use:
+    //fancy print using iterators
     for (Integer s : integerStack)
       System.out.println(s);
   }

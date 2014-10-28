@@ -5,6 +5,9 @@ import java.util.Random;
 
 public class Merge
 {
+  private static int CUTOFF = 7;
+
+  private static Comparable[] aux;
 
   private static void merge(Comparable[] a, Comparable[] aux, int lo, int mid, int hi)
   {
@@ -34,21 +37,40 @@ public class Merge
 
 
   //recursive sort 
+  //improvement1 - apply insertion sort if array is too small 20% faster
   public static void sort(Comparable[] a, Comparable[] aux, int lo, int hi)
   {
-    if (hi <= lo)
+    if (hi <= lo + CUTOFF - 1)
+    {
+      Insertion.sort(a, lo, hi);
       return;
+    }
+
     int mid = lo + (hi - lo) / 2;
     sort (a, aux, lo, mid);
     sort (a, aux, mid + 1, hi);
+    if (!less(a[mid+1], a[mid])) return; //already sorted
     merge(a, aux, lo, mid, hi); //note the alignment of the method names
+  }
+
+  //bottom up sort (we do not use the sort function below)
+  //this is faster and simpler than conventional merge
+  //
+  public static void sortBottom(Comparable[] a)
+  {
+    int N = a.length;
+    aux = new Comparable[N];
+    for (int sz = 1; sz < N; sz = sz+sz)
+      for (int lo = 0; lo < N-sz; lo += sz+sz)
+        merge(a, aux, lo, lo + sz - 1, Math.min(lo+sz+sz-1, N-1));
   }
 
   public static void sort(Comparable[] a)
   {
-    Comparable[] aux = new Comparable[a.length];
-    sort(a, aux, 0, a.length - 1);
+    aux = new Comparable[a.length];
+    sort(a, aux, 0, a.length - 1); //0, 15
   }
+
 
   //returns 1 depending on whether list is sorted or not
   private static boolean isSorted(Comparable[] a, int lo, int hi)
@@ -131,30 +153,35 @@ public class Merge
     long endTime = System.nanoTime();
     long duration = (endTime - startTime);
     //time to sort 
-    System.out.println("Time to sort = " + duration);
+    System.out.println("Time to sort = " + duration/1e9);
 
     for (int i = 0; i < size; i++)
       System.out.println(array[i]);
 
-    System.out.println("Sort the characters using merge sort");
-
-    String mergeExample = "MERGESORTEXAMPLE"; //I think in C++ we can access each character form the string array
-    //in java we cannot do this and must deal explicitly with character arrays
-
-    char[] initial = mergeExample.toCharArray(); //does the char[] support comparable like Integer does?
-
-    Character[] array2 = new Character[mergeExample.length()];
-
-    for(int i = 0; i < mergeExample.length(); i++)
-     array2[i] = initial[i]; 
-
-    //print out the character array
-    for(int i = 0; i < mergeExample.length(); i++)
-      System.out.println(array2[i]);
     
-    sorter.sort(array2);
+    
 
-    for(int i = 0; i < mergeExample.length(); i++)
-      System.out.println(array2[i]);
+    // System.out.println("Sort the characters using merge sort");
+
+    // String mergeExample = "MERGESORTEXAMPLE"; //I think in C++ we can access each character form the string array
+    // //in java we cannot do this and must deal explicitly with character arrays
+
+    // char[] initial = mergeExample.toCharArray(); //does the char[] support comparable like Integer does?
+
+    // Character[] array2 = new Character[mergeExample.length()];
+
+    // for(int i = 0; i < mergeExample.length(); i++)
+    //  array2[i] = initial[i]; 
+
+    // //print out the character array
+    // for(int i = 0; i < mergeExample.length(); i++)
+    //   System.out.println(array2[i]);
+    
+    // sorter.sort(array2);
+
+    // for(int i = 0; i < mergeExample.length(); i++)
+    //   System.out.println(array2[i]);
+
+
   }
 }

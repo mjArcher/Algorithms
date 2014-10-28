@@ -1,0 +1,24 @@
+Week 3 of the algorithms course
+
+Merge sort  - done 
+Bottom-up mergesort - done
+sorting complexity
+comparators 
+stability
+
+Notes on implementation
+
+1. Comparable requires the compareTo() method to be implemented
+class that implements comparable will be comparable, meaning that instances can be compared with each other
+(we need to @Override the compare function
+2. Class that implements Comparator will be used in two situations:
+Can be passed into a sort method, such as Collections.sort(), or Arrays.sort(), 
+It can also be used to control the order of certain data structure such as sorted sets or sorted maps.
+
+
+I have implemented Merge with improvements and sym-linked insertion for the optimisation (small arrays)
+currently have implemented examples of both an integer and char sort, using the associated wrapper classes 
+(test whether comparable could be used here)
+
+To do
+Convex hull - complete the implementation

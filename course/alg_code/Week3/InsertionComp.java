@@ -1,39 +1,37 @@
+//comparator implementation for insertion sort
 import java.util.ArrayList; //can change size dynamically, cannot work with primitive types (use wrappers instead??)
 import java.util.List;
 import java.util.Collections;
+import java.util.Comparator;
 
+//we can use this to sort Students (implement comparator interface)
 public class Insertion
 {
-  //left this here to show how insertion sort is used on its own
-  public static void sort(Comparable[] a)
+  public static void sort(Object[] a, Comparator comparator)
   {
     int N = a.length;
     for (int i = 0; i < N; i++)
-      for (int j = i; j > 0; j--)
-        if (less(a[j], a[j-1]))
-          exch(a, j, j-1);
-        else break;
+      for (int j = i; j > 0 && less(comparator, a[j], a[j-1]); j--)
+        exch(a, j, j-1);
   }
 
-  //this is for the optimised Merge function
-  public static void sort(Comparable[] a, int lo, int hi)
+  //sort for the merge function
+  public static void sort(Object[] a, Comparator comparator, int lo, int hi)
   {
     int N = a.length;
     for (int i = lo; i <= hi; i++) //note the change here
-      for (int j = i; j > lo; j--)
-        if (less(a[j], a[j-1]))
-          exch(a, j, j-1);
-        else break;
+      for (int j = i; j > lo && less(comparator, a[j], a[j-1]); j--)
+        exch(a, j, j-1);
   }
 
-  private static boolean less(Comparable v, Comparable w)
+  private static boolean less(Comparator c, Object v, Object w)
   {
-    return v.compareTo(w) < 0; //method that all Comparable objects have implemented
+    return c.compare(v, w) < 0;
   }
 
-  private static void exch(Comparable[] a, int i, int j)
+  private static void exch(Object[] a, int i, int j)
   {
-    Comparable swap = a[i];
+    Object swap = a[i];
     a[i] = a[j];
     a[j] = swap;
   }
