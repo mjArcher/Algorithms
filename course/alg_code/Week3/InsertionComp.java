@@ -69,6 +69,7 @@ public class Insertion
 
     long startTime = System.nanoTime();
     Insertion sorter = new Insertion();
+    //how do we change the sort function
     sorter.sort(array);
     long endTime = System.nanoTime();
     long duration = (endTime - startTime);

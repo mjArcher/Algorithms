@@ -6,6 +6,8 @@ sorting complexity
 comparators 
 stability
 
+Relevant files:
+
 Notes on implementation
 
 1. Comparable requires the compareTo() method to be implemented
@@ -15,6 +17,7 @@ class that implements comparable will be comparable, meaning that instances can 
 Can be passed into a sort method, such as Collections.sort(), or Arrays.sort(), 
 It can also be used to control the order of certain data structure such as sorted sets or sorted maps.
 
+3. I have implemented the example Comparators as shown in the notes for Student.java.
 
 I have implemented Merge with improvements and sym-linked insertion for the optimisation (small arrays)
 currently have implemented examples of both an integer and char sort, using the associated wrapper classes 

@@ -5,6 +5,7 @@ import java.util.Random;
 
 public class Merge
 {
+  //used for the optimisation of merge sort
   private static int CUTOFF = 7;
 
   private static Comparable[] aux;
@@ -70,7 +71,6 @@ public class Merge
     aux = new Comparable[a.length];
     sort(a, aux, 0, a.length - 1); //0, 15
   }
-
 
   //returns 1 depending on whether list is sorted or not
   private static boolean isSorted(Comparable[] a, int lo, int hi)

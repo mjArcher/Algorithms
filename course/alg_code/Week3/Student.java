@@ -4,6 +4,8 @@ import java.util.Collections;
 import java.util.Arrays; //not sure if this is required
 import java.util.ArrayList;
 
+//this is an example of how we go about sorting data on two different keys
+
 //how do we use comparators for integers
 //won't we need to create a new Integer class with a private static class which implements the Comparator interface?
 
@@ -23,7 +25,7 @@ public class Student
   {
     public int compare(Student v, Student w)
     {
-      return v.name.compareTo(w.name); //look at this method
+      return v.name.compareTo(w.name); //look at this method -- uses the string compareTo method
     }
   }
 
@@ -31,7 +33,7 @@ public class Student
   {
     public int compare(Student v, Student w)
     {
-      return v.section - w.section;
+      return v.section - w.section; //returns the difference of the sections, - if less, + if greater and 0 if equal
     }
   }
 
@@ -58,7 +60,8 @@ public class Student
     a[3] = D;
     a[4] = E;
     
-    Arrays.sort(a, Student.BY_NAME); 
+    Arrays.sort(a, Student.BY_NAME);  
+    
     System.out.println("\nSort by Name");
     for(int i = 0; i < 5; i++)
       System.out.println("Name " + a[i].name + ", Section " + a[i].section);
