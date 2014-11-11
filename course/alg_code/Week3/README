@@ -6,9 +6,15 @@ sorting complexity
 comparators 
 stability
 
+A note on implementation
+
 Relevant files:
 
 Notes on implementation
+Compile with:
+javac -d ./classes file.java 
+java -cp ./classes Merge
+cp stands for classpath
 
 1. Comparable requires the compareTo() method to be implemented
 class that implements comparable will be comparable, meaning that instances can be compared with each other

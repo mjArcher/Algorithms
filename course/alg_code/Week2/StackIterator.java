@@ -1,7 +1,7 @@
 import java.util.Iterator;
 
 //a basic stack using the iterable functionality (using Linked lists)
-//details the principle of FIFO functionality (as opposed to a queue)
+//details the principle of LIFO functionality (as opposed to a queue)
 //
 
 public class StackIterator<Item> implements Iterable<Item>

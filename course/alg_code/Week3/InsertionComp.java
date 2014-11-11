@@ -1,4 +1,5 @@
 //comparator implementation for insertion sort
+//Have a look at the student class, we need methods for the 
 import java.util.ArrayList; //can change size dynamically, cannot work with primitive types (use wrappers instead??)
 import java.util.List;
 import java.util.Collections;
